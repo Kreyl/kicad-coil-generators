@@ -287,7 +287,7 @@ class CoilGeneratorID2L(PCBTraceComponent):
         self.PlacePad(pad_number, pos, pad_d, self.pad_hole)
 
         """
-        Add Net Tie Group to the footprint. This allows the DRC to understand 
+        Add Net Tie Group to the footprint. This allows the DRC to understand
         that the shorting traces are OK for this component
         """
         self.GenerateNetTiePadGroup()
@@ -503,7 +503,7 @@ class CoilGenerator1L1T(PCBTraceComponent):
         self.PlacePad(pad_number, pos, pad_d, self.pad_hole)
 
         """
-        Add Net Tie Group to the footprint. This allows the DRC to understand 
+        Add Net Tie Group to the footprint. This allows the DRC to understand
         that the shorting traces are OK for this component
         """
         self.GenerateNetTiePadGroup()
@@ -522,3 +522,218 @@ class CoilGenerator1L1T(PCBTraceComponent):
         )
 
         self.DrawText(fab_text_s, pcbnew.User_2)
+
+class SquareCoilGenerator(PCBTraceComponent):
+    center_x = 0
+    center_y = 0
+
+    json_file = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "SquareCoilGenerator.json"
+    )
+
+    GetName = lambda self: "Square Coil Generator"
+    GetDescription = lambda self: "Generates a square-shaped coil."
+    GetValue = lambda self: "Square Coil"
+
+    def GenerateParameterList(self):
+        # Set default values for square coil parameters
+        defaults = {
+            "Coil specs": {
+                "Total Turns": 10,
+                "First Layer": "F_Cu",
+                "Second Layer": "B_Cu",
+                "Direction": True,
+            },
+            "Install Info": {
+                "Side Length": 30000000,
+                "Inner Gap": 500000,
+            },
+            "Fab Specs": {
+                "Trace Width": 200000,
+                "Trace Spacing": 200000,
+                "Via Drill": 300000,
+                "Via Annular Ring": 150000,
+                "Pad Drill": 500000,
+                "Pad Annular Ring": 200000,
+                "Copper Thickness (Oz.Cu.)": 1,
+            },
+        }
+
+        # Load previous values if available
+        if os.path.exists(self.json_file):
+            with open(self.json_file, "r") as f:
+                defaults = json.load(f)
+
+        # Add parameters
+        self.AddParam(
+            "Coil specs",
+            "Total Turns",
+            self.uInteger,
+            defaults["Coil specs"]["Total Turns"],
+            min_value=1,
+        )
+        self.AddParam(
+            "Coil specs",
+            "First Layer",
+            self.uString,
+            defaults["Coil specs"]["First Layer"],
+            hint="Layer name. Uses '_' instead of '.'",
+        )
+        self.AddParam(
+            "Coil specs",
+            "Second Layer",
+            self.uString,
+            defaults["Coil specs"]["Second Layer"],
+            hint="Layer name. Uses '_' instead of '.'",
+        )
+        self.AddParam(
+            "Coil specs",
+            "Direction",
+            self.uBool,
+            defaults["Coil specs"]["Direction"],
+            hint="Set to True for clockwise, False for counter-clockwise",
+        )
+        self.AddParam(
+            "Install Info",
+            "Side Length",
+            self.uMM,
+            pcbnew.ToMM(defaults["Install Info"]["Side Length"]),
+        )
+        self.AddParam(
+            "Install Info",
+            "Inner Gap",
+            self.uMM,
+            pcbnew.ToMM(defaults["Install Info"]["Inner Gap"]),
+            hint="Gap between the innermost loop and the aperture",
+        )
+        self.AddParam(
+            "Fab Specs",
+            "Trace Width",
+            self.uMM,
+            pcbnew.ToMM(defaults["Fab Specs"]["Trace Width"]),
+            min_value=0,
+        )
+        self.AddParam(
+            "Fab Specs",
+            "Trace Spacing",
+            self.uMM,
+            pcbnew.ToMM(defaults["Fab Specs"]["Trace Spacing"]),
+            min_value=0,
+        )
+        self.AddParam(
+            "Fab Specs",
+            "Via Drill",
+            self.uMM,
+            pcbnew.ToMM(defaults["Fab Specs"]["Via Drill"]),
+            min_value=0,
+            hint="Diameter",
+        )
+        self.AddParam(
+            "Fab Specs",
+            "Via Annular Ring",
+            self.uMM,
+            pcbnew.ToMM(defaults["Fab Specs"]["Via Annular Ring"]),
+            min_value=0,
+            hint="Radius",
+        )
+        self.AddParam(
+            "Fab Specs",
+            "Pad Drill",
+            self.uMM,
+            pcbnew.ToMM(defaults["Fab Specs"]["Pad Drill"]),
+            min_value=0,
+        )
+        self.AddParam(
+            "Fab Specs",
+            "Pad Annular Ring",
+            self.uMM,
+            pcbnew.ToMM(defaults["Fab Specs"]["Pad Annular Ring"]),
+            min_value=0,
+        )
+        self.AddParam(
+            "Fab Specs",
+            "Copper Thickness (Oz.Cu.)",
+            self.uFloat,
+            defaults["Fab Specs"]["Copper Thickness (Oz.Cu.)"],
+            min_value=0.01,
+        )
+
+    def CheckParameters(self):
+        self.side_length = self.parameters["Install Info"]["Side Length"]
+        self.inner_gap = self.parameters["Install Info"]["Inner Gap"]
+
+        self.trace_width = self.parameters["Fab Specs"]["Trace Width"]
+        self.trace_space = self.parameters["Fab Specs"]["Trace Spacing"]
+        self.via_hole = self.parameters["Fab Specs"]["Via Drill"]
+        self.via_ann_ring = self.parameters["Fab Specs"]["Via Annular Ring"]
+        self.pad_hole = self.parameters["Fab Specs"]["Pad Drill"]
+        self.pad_ann_ring = self.parameters["Fab Specs"]["Pad Annular Ring"]
+        self.copper_thickness = self.parameters["Fab Specs"][
+            "Copper Thickness (Oz.Cu.)"
+        ]
+
+        self.turns = self.parameters["Coil specs"]["Total Turns"]
+        self.first_layer = getattr(pcbnew, self.parameters["Coil specs"]["First Layer"])
+        self.second_layer = getattr(
+            pcbnew, self.parameters["Coil specs"]["Second Layer"]
+        )
+        self.clockwise_bool = self.parameters["Coil specs"]["Direction"]
+
+        with open(self.json_file, "w") as f:
+            json.dump(self.parameters, f, indent=4)
+
+    def BuildThisFootprint(self):
+        self.trace_length = 0
+        self.vias = 0
+
+        self.cw_multiplier = 1 if self.clockwise_bool else -1
+
+        """ Draw the square coil """
+        self.draw.SetLayer(pcbnew.User_1)
+        self.draw.SetLineThickness(self.trace_width)
+
+        current_length = self.side_length + self.inner_gap
+        for turn in range(self.turns):
+            half_length = current_length / 2
+            self.draw.Line(
+                self.center_x - half_length,
+                self.center_y - half_length,
+                self.center_x + half_length,
+                self.center_y - half_length,
+            )
+            self.draw.Line(
+                self.center_x + half_length,
+                self.center_y - half_length,
+                self.center_x + half_length,
+                self.center_y + half_length,
+            )
+            self.draw.Line(
+                self.center_x + half_length,
+                self.center_y + half_length,
+                self.center_x - half_length,
+                self.center_y + half_length,
+            )
+            self.draw.Line(
+                self.center_x - half_length,
+                self.center_y + half_length,
+                self.center_x - half_length,
+                self.center_y - half_length,
+            )
+            current_length += self.trace_width + self.trace_space
+
+        """ Add pads """
+        pad_d = self.pad_ann_ring * 2 + self.pad_hole
+        pad_number = 1
+        self.PlacePad(
+            pad_number,
+            pcbnew.VECTOR2I(self.center_x - half_length, self.center_y),
+            pad_d,
+            self.pad_hole,
+        )
+        pad_number = 2
+        self.PlacePad(
+            pad_number,
+            pcbnew.VECTOR2I(self.center_x + half_length, self.center_y),
+            pad_d,
+            self.pad_hole,
+        )
