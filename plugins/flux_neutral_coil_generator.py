@@ -1,149 +1,55 @@
 import pcbnew
 import FootprintWizardBase
 import math
-import json
-import os
-
-from .PCBTraceComponent import *
 
 
-class FluxNeutralCoilGen(PCBTraceComponent):
-    center_x = 0
-    center_y = 0
-
-    json_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "FluxNeutralCoilGen.json"
-    )
-
+class FluxNeutralCoilGen(FootprintWizardBase.FootprintWizard):
     GetName = lambda self: "Flux Neutral Coil Generator"
     GetDescription = (
         lambda self: "Generates a flux-neutral coil within a circular aperture."
     )
     GetValue = lambda self: "Flux-Neutral Coil"
 
+    center_x = 0
+    center_y = 0
+
     def GenerateParameterList(self):
-        # Set some reasonable default values for the parameters
-        defaults = {
-            "Coil specs": {
-                "Turns": 5,
-                "Minimum Radius": 1000000,
-                "Stub Length": 5000000,
-                "First Layer": "F_Cu",
-                "Second Layer": "In1_Cu",
-            },
-            "Install Info": {"Outer Ring radius": 75000000, "Outer Ring gap": 2000000},
-            "Fab Specs": {
-                "Trace Width": 200000,
-                "Trace Spacing": 200000,
-                "Via Drill": 254000,
-                "Via Annular Ring": 127000,
-                "Pad Drill": 500000,
-                "Pad Annular Ring": 200000,
-            },
-        }
-
-        # If this has been run before, load the previous values
-        if os.path.exists(self.json_file):
-            with open(self.json_file, "r") as f:
-                defaults = json.load(f)
-
         # Info about the coil itself.
-        self.AddParam(
-            "Coil specs",
-            "Turns",
-            self.uInteger,
-            defaults["Coil specs"]["Turns"],
-            min_value=1,
-        )
-        self.AddParam(
-            "Coil specs",
-            "Minimum Radius",
-            self.uMM,
-            pcbnew.ToMM(defaults["Coil specs"]["Minimum Radius"]),
-            min_value=0,
-        )
-        self.AddParam(
-            "Coil specs",
-            "Stub Length",
-            self.uMM,
-            pcbnew.ToMM(defaults["Coil specs"]["Stub Length"]),
-            min_value=0,
-        )
+        self.AddParam("Coil specs", "Turns", self.uInteger, 5, min_value=1)
+        self.AddParam("Coil specs", "Minimum Radius", self.uMM, 1, min_value=0)
+        self.AddParam("Coil specs", "Stub Length", self.uMM, 5, min_value=0)
         self.AddParam(
             "Coil specs",
             "First Layer",
             self.uString,
-            defaults["Coil specs"]["First Layer"],
+            "F_Cu",
             hint="Layer name.  Uses '_' instead of '.'",
         )
         self.AddParam(
             "Coil specs",
             "Second Layer",
             self.uString,
-            defaults["Coil specs"]["Second Layer"],
+            "In1_Cu",
             hint="Layer name.  Uses '_' instead of '.'",
         )
 
         # Information about where this footprint needs to fit into.
-        self.AddParam(
-            "Install Info",
-            "Outer Ring radius",
-            self.uMM,
-            pcbnew.ToMM(defaults["Install Info"]["Outer Ring radius"]),
-        )
+        self.AddParam("Install Info", "Outer Ring radius", self.uMM, 75)
         self.AddParam(
             "Install Info",
             "Outer Ring gap",
             self.uMM,
-            pcbnew.ToMM(defaults["Install Info"]["Outer Ring gap"]),
+            2,
             hint="Gap between the outer loop of this coil and the aperture",
         )
 
         # Info about the fabrication capabilities
-        self.AddParam(
-            "Fab Specs",
-            "Trace Width",
-            self.uMM,
-            pcbnew.ToMM(defaults["Fab Specs"]["Trace Width"]),
-            min_value=0,
-        )
-        self.AddParam(
-            "Fab Specs",
-            "Trace Spacing",
-            self.uMM,
-            pcbnew.ToMM(defaults["Fab Specs"]["Trace Spacing"]),
-            min_value=0,
-        )
-        self.AddParam(
-            "Fab Specs",
-            "Via Drill",
-            self.uMM,
-            pcbnew.ToMM(defaults["Fab Specs"]["Via Drill"]),
-            min_value=0,
-            hint="Diameter",
-        )
-        self.AddParam(
-            "Fab Specs",
-            "Via Annular Ring",
-            self.uMM,
-            pcbnew.ToMM(defaults["Fab Specs"]["Via Annular Ring"]),
-            min_value=0,
-            hint="Radius",
-        )
-        self.AddParam(
-            "Fab Specs",
-            "Pad Drill",
-            self.uMM,
-            pcbnew.ToMM(defaults["Fab Specs"]["Pad Drill"]),
-            min_value=0,
-        )
-        self.AddParam(
-            "Fab Specs",
-            "Pad Annular Ring",
-            self.uMM,
-            pcbnew.ToMM(defaults["Fab Specs"]["Pad Annular Ring"]),
-            min_value=0,
-        )
+        self.AddParam("Fab Specs", "Trace Width", self.uMM, 0.2, min_value=0)
+        self.AddParam("Fab Specs", "Trace Spacing", self.uMM, 0.2, min_value=0)
+        self.AddParam("Fab Specs", "Via Drill", self.uMM, 0.254, min_value=0)
+        self.AddParam("Fab Specs", "Via Annular Ring", self.uMM, 0.127, min_value=0)
+        self.AddParam("Fab Specs", "Pad Drill", self.uMM, 0.5, min_value=0)
+        self.AddParam("Fab Specs", "Pad Annular Ring", self.uMM, 0.2, min_value=0)
 
     def CheckParameters(self):
         self.aperture_r = self.parameters["Install Info"]["Outer Ring radius"]
@@ -163,9 +69,6 @@ class FluxNeutralCoilGen(PCBTraceComponent):
         self.second_layer = getattr(
             pcbnew, self.parameters["Coil specs"]["Second Layer"]
         )
-
-        with open(self.json_file, "w") as f:
-            json.dump(self.parameters, f, indent=4)
 
     def BuildThisFootprint(self):
         """Draw the outline circle as reference."""
@@ -193,9 +96,6 @@ class FluxNeutralCoilGen(PCBTraceComponent):
         )
         cc = self.via_ann_ring * 2 + self.via_hole + self.trace_space
         via_gap = math.sqrt(cc * cc - aa * aa)  # units of KiCAD_internal
-
-        pad_d = self.pad_ann_ring * 2 + self.pad_hole
-        via_d = self.via_ann_ring * 2 + self.via_hole
 
         self.draw.SetLineThickness(self.trace_width)
 
@@ -372,7 +272,14 @@ class FluxNeutralCoilGen(PCBTraceComponent):
         """
         Draw the stitching vias between the front and back layers
         """
+        via_d = self.via_ann_ring * 2 + self.via_hole
         pad_number = 3
+        pad = pcbnew.PAD(self.module)
+        pad.SetSize(pcbnew.VECTOR2I(via_d, via_d))
+        pad.SetShape(pcbnew.PAD_SHAPE_CIRCLE)
+        pad.SetAttribute(pcbnew.PAD_ATTRIB_PTH)
+        pad.SetLayerSet(pcbnew.LSET.AllCuMask())
+        pad.SetDrillSize(pcbnew.VECTOR2I(self.via_hole, self.via_hole))
 
         for ii in range(self.turns):
             if (ii % 2) == 1:
@@ -382,12 +289,22 @@ class FluxNeutralCoilGen(PCBTraceComponent):
             pos = pcbnew.VECTOR2I(
                 int(arc_start_x + offset), int(arc_start_y - ii * pitch)
             )
-            self.PlacePad(pad_number, pos, via_d, self.via_hole, via=True)
+            pad.SetPosition(pos)
+            pad.SetNumber(pad_number)
+            pad.SetName(str(pad_number))
+            self.module.Add(pad)
+            pad = (
+                pad.Duplicate()
+            )  # needed because otherwise you keep editing the same object.
 
             pos = pcbnew.VECTOR2I(
                 int(-arc_start_x - offset), int(arc_start_y - ii * pitch)
             )
-            self.PlacePad(pad_number, pos, via_d, self.via_hole, via=True)
+            pad.SetPosition(pos)
+            pad.SetNumber(pad_number)
+            pad.SetName(str(pad_number))
+            self.module.Add(pad)
+            pad = pad.Duplicate()
 
         """
         Draw the tap points from the coil.  
@@ -415,17 +332,39 @@ class FluxNeutralCoilGen(PCBTraceComponent):
         pos = pcbnew.VECTOR2I(
             int(arc_center_x + aa), int(-arc_start_y - aa - self.stub_length)
         )
-        # self.make_pad(pos, 1)
-        self.PlacePad(1, pos, pad_d, self.pad_hole)
+        pad = pcbnew.PAD(self.module)
+        pad.SetSize(
+            pcbnew.VECTOR2I(
+                self.pad_ann_ring + self.pad_hole, self.pad_ann_ring + self.pad_hole
+            )
+        )
+        pad.SetAttribute(pcbnew.PAD_ATTRIB_PTH)
+        pad.SetLayerSet(pad.PTHMask())
+        pad.SetShape(pcbnew.PAD_SHAPE_CIRCLE)
+        pad.SetDrillSize(pcbnew.VECTOR2I(self.pad_hole, self.pad_hole))
+        pad.SetPosition(pos)
+        pad.SetNumber(1)
+        pad.SetName("1")
+        pad.SetLayer(self.first_layer)
+        self.module.Add(pad)
 
         # Diagonal track to get to via
         self.draw.Line(
             -start_x, -line_length + aa * 2, -start_x - aa, -line_length + aa
         )
-
         # Add Via
         pos = pcbnew.VECTOR2I(int(-start_x - aa), int(-line_length + aa))
-        self.PlacePad(pad_number, pos, via_d, self.via_hole, via=True)
+        pad = pcbnew.PAD(self.module)
+        pad.SetSize(pcbnew.VECTOR2I(via_d, via_d))
+        pad.SetShape(pcbnew.PAD_SHAPE_CIRCLE)
+        pad.SetAttribute(pcbnew.PAD_ATTRIB_PTH)
+        pad.SetLayerSet(pcbnew.LSET.AllCuMask())
+        pad.SetDrillSize(pcbnew.VECTOR2I(self.via_hole, self.via_hole))
+        pad.SetNumber(pad_number)
+        pad.SetName(str(pad_number))
+        pad_number += 1
+        pad.SetPosition(pos)
+        self.module.Add(pad)
 
         # Vertical track to get under the coils.
         self.draw.SetLayer(self.second_layer)
@@ -433,31 +372,19 @@ class FluxNeutralCoilGen(PCBTraceComponent):
             -start_x - aa,
             -line_length + aa,
             -start_x - aa,
-            -line_length - aa - (self.turns - 1) * pitch,  # - self.stub_length,
+            -line_length - aa - (self.turns - 1) * pitch - self.stub_length,
         )
 
         # Jogging right to clear space for Vias
         self.draw.Line(
             -start_x - aa,
-            -line_length - aa - (self.turns - 1) * pitch,  # - self.stub_length,
+            -line_length - aa - (self.turns - 1) * pitch - self.stub_length,
             -start_x - aa + self.min_radius,
-            -line_length - aa - (self.turns - 1) * pitch - self.min_radius,
-        )
-
-        # Add Via
-        pos = pcbnew.VECTOR2I(
-            int(-start_x - aa + self.min_radius),
-            int(-line_length - aa - (self.turns - 1) * pitch - self.min_radius),
-        )
-        self.PlacePad(pad_number, pos, via_d, self.via_hole, via=True)
-
-        # Drawing stub section
-        self.draw.SetLayer(self.first_layer)
-        self.draw.Line(
-            -start_x - aa + self.min_radius,
-            -line_length - aa - (self.turns - 1) * pitch - self.min_radius,
-            -start_x - aa + self.min_radius,
-            -arc_start_y - aa - self.stub_length,
+            -line_length
+            - aa
+            - (self.turns - 1) * pitch
+            - self.stub_length
+            - self.min_radius,
         )
 
         # Add pad for other side of the coil
@@ -465,27 +392,45 @@ class FluxNeutralCoilGen(PCBTraceComponent):
             int(-start_x - aa + self.min_radius),
             int(-arc_start_y - aa - self.stub_length),
         )
-        self.PlacePad(2, pos, pad_d, self.pad_hole)
+        pad = pcbnew.PAD(self.module)
+        pad.SetSize(
+            pcbnew.VECTOR2I(
+                self.pad_ann_ring + self.pad_hole, self.pad_ann_ring + self.pad_hole
+            )
+        )
+        pad.SetAttribute(pcbnew.PAD_ATTRIB_PTH)
+        pad.SetLayerSet(pad.PTHMask())
+        pad.SetShape(pcbnew.PAD_SHAPE_CIRCLE)
+        pad.SetDrillSize(pcbnew.VECTOR2I(self.pad_hole, self.pad_hole))
+        pad.SetPosition(pos)
+        pad.SetNumber(2)
+        pad.SetName("2")
+        self.module.Add(pad)
 
         """
         Add Net Tie Group to the footprint. This allows the DRC to understand 
         that the shorting traces are OK for this component
         """
-        self.GenerateNetTiePadGroup()
+        self.module.AddNetTiePadGroup("1,2,3")
 
         """
         Capture the parameters in the Fab layer
         """
+        text_size = self.GetTextSize()  # IPC nominal
         fab_text_s = (
-            f"Flux Neutral Coil\n"
             f"Outer Diameter: {self.aperture_r/1e6}\n"
             f"Outer Ring Gap: {self.aperture_gap/1e6}\n"
             f"Turns: {self.turns}\n"
-            f"Min Radius: {self.min_radius/1e6}\n"
             f'Layers (Start->Finish): {self.parameters["Coil specs"]["First Layer"]}->{self.parameters["Coil specs"]["Second Layer"]}\n'
             f"Trace Width/space: {self.trace_width/1e6}/{self.trace_space/1e6}\n"
-            f"Via Drill/annular ring: {self.via_hole/1e6}/{self.via_ann_ring/1e6}\n"
             f"Pad Drill/annular ring: {self.pad_hole/1e6}/{self.pad_ann_ring/1e6}\n"
+            f"Via Drill/annular ring: {self.via_hole/1e6}/{self.via_ann_ring/1e6}"
+            f"Min Radius: {self.min_radius/1e6}\n"
             f"Stub Length: {self.stub_length/1e6}\n"
         )
-        self.DrawText(fab_text_s, pcbnew.User_2)
+        fab_text = pcbnew.PCB_TEXT(self.module)
+        fab_text.SetText(fab_text_s)
+        fab_text.SetPosition(pcbnew.VECTOR2I(0, 0))
+        fab_text.SetTextSize(pcbnew.VECTOR2I(text_size, text_size))
+        fab_text.SetLayer(pcbnew.F_Fab)
+        self.module.Add(fab_text)

@@ -523,30 +523,30 @@ class CoilGenerator1L1T(PCBTraceComponent):
 
         self.DrawText(fab_text_s, pcbnew.User_2)
 
-class SquareCoilGenerator(PCBTraceComponent):
+class RectangleCoilGenerator(PCBTraceComponent):
     center_x = 0
     center_y = 0
 
     json_file = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "SquareCoilGenerator.json"
+        os.path.dirname(os.path.abspath(__file__)), "RectangleCoilGenerator.json"
     )
 
-    GetName = lambda self: "Square Coil Generator"
-    GetDescription = lambda self: "Generates a square-shaped coil."
-    GetValue = lambda self: "Square Coil"
+    GetName = lambda self: "Coil Generator Rectangle"
+    GetDescription = lambda self: "Generates a rectangular-shaped coil."
+    GetValue = lambda self: "Rectangle Coil"
 
     def GenerateParameterList(self):
-        # Set default values for square coil parameters
+        # Set default values for rectangular coil parameters
         defaults = {
             "Coil specs": {
                 "Total Turns": 10,
                 "First Layer": "F_Cu",
                 "Second Layer": "B_Cu",
+                "Width": 30000000,
+                "Height": 20000000,
+                "Stub Length": 1000000,
                 "Direction": True,
-            },
-            "Install Info": {
-                "Side Length": 30000000,
-                "Inner Gap": 500000,
+                "Rounding Radius": 1000000
             },
             "Fab Specs": {
                 "Trace Width": 200000,
@@ -586,6 +586,26 @@ class SquareCoilGenerator(PCBTraceComponent):
             defaults["Coil specs"]["Second Layer"],
             hint="Layer name. Uses '_' instead of '.'",
         )
+
+        self.AddParam(
+            "Coil specs",
+            "Width",
+            self.uMM,
+            pcbnew.ToMM(defaults["Coil specs"]["Width"]),
+        )
+        self.AddParam(
+            "Coil specs",
+            "Height",
+            self.uMM,
+            pcbnew.ToMM(defaults["Coil specs"]["Height"]),
+        )
+        self.AddParam(
+            "Coil specs",
+            "Stub Length",
+            self.uMM,
+            pcbnew.ToMM(defaults["Coil specs"]["Stub Length"]),
+            hint="Length of stubs to pads and via",
+        )
         self.AddParam(
             "Coil specs",
             "Direction",
@@ -593,19 +613,15 @@ class SquareCoilGenerator(PCBTraceComponent):
             defaults["Coil specs"]["Direction"],
             hint="Set to True for clockwise, False for counter-clockwise",
         )
+
         self.AddParam(
-            "Install Info",
-            "Side Length",
+            "Coil specs",
+            "Rounding Radius",
             self.uMM,
-            pcbnew.ToMM(defaults["Install Info"]["Side Length"]),
+            pcbnew.ToMM(defaults["Coil specs"]["Rounding Radius"]),
+            hint="Set to 0 for no rounding",
         )
-        self.AddParam(
-            "Install Info",
-            "Inner Gap",
-            self.uMM,
-            pcbnew.ToMM(defaults["Install Info"]["Inner Gap"]),
-            hint="Gap between the innermost loop and the aperture",
-        )
+
         self.AddParam(
             "Fab Specs",
             "Trace Width",
@@ -659,8 +675,15 @@ class SquareCoilGenerator(PCBTraceComponent):
         )
 
     def CheckParameters(self):
-        self.side_length = self.parameters["Install Info"]["Side Length"]
-        self.inner_gap = self.parameters["Install Info"]["Inner Gap"]
+        self.turns = self.parameters["Coil specs"]["Total Turns"]
+        self.first_layer = getattr(pcbnew, self.parameters["Coil specs"]["First Layer"])
+        self.second_layer = getattr(pcbnew, self.parameters["Coil specs"]["Second Layer"])
+
+        self.width = self.parameters["Coil specs"]["Width"]
+        self.height = self.parameters["Coil specs"]["Height"]
+        self.stub_len = self.parameters["Coil specs"]["Stub Length"]
+        self.clockwise_bool = self.parameters["Coil specs"]["Direction"]
+        self.rounding_radius = self.parameters["Coil specs"]["Rounding Radius"]
 
         self.trace_width = self.parameters["Fab Specs"]["Trace Width"]
         self.trace_space = self.parameters["Fab Specs"]["Trace Spacing"]
@@ -668,72 +691,112 @@ class SquareCoilGenerator(PCBTraceComponent):
         self.via_ann_ring = self.parameters["Fab Specs"]["Via Annular Ring"]
         self.pad_hole = self.parameters["Fab Specs"]["Pad Drill"]
         self.pad_ann_ring = self.parameters["Fab Specs"]["Pad Annular Ring"]
-        self.copper_thickness = self.parameters["Fab Specs"][
-            "Copper Thickness (Oz.Cu.)"
-        ]
-
-        self.turns = self.parameters["Coil specs"]["Total Turns"]
-        self.first_layer = getattr(pcbnew, self.parameters["Coil specs"]["First Layer"])
-        self.second_layer = getattr(
-            pcbnew, self.parameters["Coil specs"]["Second Layer"]
-        )
-        self.clockwise_bool = self.parameters["Coil specs"]["Direction"]
+        self.copper_thickness = self.parameters["Fab Specs"]["Copper Thickness (Oz.Cu.)"]
 
         with open(self.json_file, "w") as f:
             json.dump(self.parameters, f, indent=4)
 
     def BuildThisFootprint(self):
-        self.trace_length = 0
-        self.vias = 0
+        left, half_width, half_height, curr_radius = 0, 0, 0, 0
+        kDegrees = 90
 
-        self.cw_multiplier = 1 if self.clockwise_bool else -1
-
-        """ Draw the square coil """
-        self.draw.SetLayer(pcbnew.User_1)
         self.draw.SetLineThickness(self.trace_width)
+        cw_multiplier = 1 if self.clockwise_bool else -1
 
-        current_length = self.side_length + self.inner_gap
-        for turn in range(self.turns):
-            half_length = current_length / 2
-            self.draw.Line(
-                self.center_x - half_length,
-                self.center_y - half_length,
-                self.center_x + half_length,
-                self.center_y - half_length,
-            )
-            self.draw.Line(
-                self.center_x + half_length,
-                self.center_y - half_length,
-                self.center_x + half_length,
-                self.center_y + half_length,
-            )
-            self.draw.Line(
-                self.center_x + half_length,
-                self.center_y + half_length,
-                self.center_x - half_length,
-                self.center_y + half_length,
-            )
-            self.draw.Line(
-                self.center_x - half_length,
-                self.center_y + half_length,
-                self.center_x - half_length,
-                self.center_y - half_length,
-            )
-            current_length += self.trace_width + self.trace_space
+        def CalcStartPoint():
+            nonlocal half_width, half_height, curr_radius, left
+            half_width = self.width / 2
+            half_height = self.height / 2
+            curr_radius = self.rounding_radius
+            left = self.center_x - half_width
 
-        """ Add pads """
-        pad_d = self.pad_ann_ring * 2 + self.pad_hole
-        pad_number = 1
-        self.PlacePad(
-            pad_number,
-            pcbnew.VECTOR2I(self.center_x - half_length, self.center_y),
-            pad_d,
-            self.pad_hole,
-        )
-        pad_number = 2
-        self.PlacePad(
-            pad_number,
-            pcbnew.VECTOR2I(self.center_x + half_length, self.center_y),
-            pad_d,
-            self.pad_hole,
-        )
+        # ==== Draw the first winding ====
+        self.draw.SetLayer(self.first_layer)
+        CalcStartPoint()
+        for turn in range(1, self.turns, 2):
+            top = self.center_y - half_height * cw_multiplier
+            right = self.center_x + half_width
+            bottom = self.center_y + half_height * cw_multiplier
+
+            # Left center to left top
+            y_start = self.center_y
+            y_end = top + curr_radius * cw_multiplier
+            self.draw.Line(left, y_start, left, y_end)
+
+            # Arc top left
+            if(curr_radius > 0):
+                center_x = left + curr_radius
+                center_y = top + curr_radius * cw_multiplier
+                self.draw.Arc(center_x, center_y, left, center_y, pcbnew.EDA_ANGLE(kDegrees* cw_multiplier, pcbnew.DEGREES_T))
+
+            # Left top to right top
+            x_start = left + curr_radius
+            x_end = right - curr_radius
+            self.draw.Line(x_start, top, x_end, top)
+
+            # Arc top right
+            if(curr_radius > 0):
+                center_x = right - curr_radius
+                center_y = top + curr_radius * cw_multiplier
+                self.draw.Arc(center_x, center_y, center_x, top, pcbnew.EDA_ANGLE(kDegrees* cw_multiplier, pcbnew.DEGREES_T))
+
+            # Right top to right bottom
+            y_start = top + curr_radius * cw_multiplier
+            y_end = bottom - curr_radius * cw_multiplier
+            self.draw.Line(right, y_start, right, y_end)
+
+            # Arc bottom right
+            if(curr_radius > 0):
+                center_x = right - curr_radius
+                center_y = bottom - curr_radius * cw_multiplier
+                self.draw.Arc(center_x, center_y, right, center_y, pcbnew.EDA_ANGLE(kDegrees* cw_multiplier, pcbnew.DEGREES_T))
+
+            # Right bottom to left bottom
+            half_width += self.trace_width + self.trace_space
+            left = self.center_x - half_width
+            x_start = right - curr_radius
+            x_end = left + curr_radius
+            self.draw.Line(x_start, bottom, x_end, bottom)
+
+            # Arc bottom left
+            if(curr_radius > 0):
+                center_x = left + curr_radius
+                center_y = bottom - curr_radius * cw_multiplier
+                self.draw.Arc(center_x, center_y, center_x, bottom, pcbnew.EDA_ANGLE(kDegrees* cw_multiplier, pcbnew.DEGREES_T))
+
+            # Left bottom to left center
+            y_start = bottom - curr_radius * cw_multiplier
+            y_end = self.center_y
+            self.draw.Line(left, y_start, left, y_end)
+
+            # Update dimensions for next turn
+            half_height += self.trace_width + self.trace_space
+            if(curr_radius > 0):
+                curr_radius += self.trace_width + self.trace_space
+
+        # ==== Draw the second winding ====
+        # self.draw.SetLayer(self.second_layer)
+        # CalcStartPoint()
+
+
+        # ==== Add stubs and pads ====
+        pad_d = self.pad_ann_ring * 2 + self.pad_hole # Common Pads params
+        y = self.center_y
+        # Stub 1
+        x_start = self.center_x - self.width / 2 - (self.trace_width + self.trace_space) * self.turns // 2
+        x_end = x_start - self.stub_len
+        self.draw.SetLayer(self.first_layer)
+        self.draw.Line(x_start, y, x_end, y)
+        # Add pad
+        self.PlacePad(1, pcbnew.VECTOR2I(int(x_end), int(y)), pad_d, self.pad_hole)
+
+        # Stubs to via
+        y = self.center_y
+        x_start = self.center_x - self.width / 2
+        x_end = x_start + self.stub_len
+        self.draw.SetLayer(self.first_layer)
+        self.draw.Line(x_start, y, x_end, y)
+        self.draw.SetLayer(self.second_layer)
+        self.draw.Line(x_start, y, x_end, y)
+        # Add via
+        self.PlacePad(3, pcbnew.VECTOR2I(int(x_end), int(y)), pad_d, self.pad_hole)
